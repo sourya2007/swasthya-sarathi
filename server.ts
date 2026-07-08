@@ -424,7 +424,7 @@ async function startServer() {
     const distPath = path.join(process.cwd(), "dist");
     server.use(express.static(distPath));
     
-    server.get("*", (req, res) => {
+    server.get(/(.*)/, (req, res) => {
       const indexPath = path.join(distPath, "index.html");
       if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
