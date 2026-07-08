@@ -180,37 +180,51 @@ export function LiveVoiceAssistant({
     setOutputTranscripts([]);
     setCurrentInputFragment("");
     setCurrentOutputFragment("");
-    
+
+    // Create AudioContexts now (during user gesture) to avoid autoplay policy issues
+    let inputAudioCtx: AudioContext | null = null;
+    let outputAudioCtx: AudioContext | null = null;
+    let stream: MediaStream | null = null;
+    let source: MediaStreamAudioSourceNode | null = null;
+    let processor: ScriptProcessorNode | null = null;
+
+    try {
+      inputAudioCtx = new AudioContext({ sampleRate: 16000 });
+      outputAudioCtx = new AudioContext({ sampleRate: 24000 });
+      
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      source = inputAudioCtx.createMediaStreamSource(stream);
+      processor = inputAudioCtx.createScriptProcessor(4096, 1, 1);
+      
+      source.connect(processor);
+      processor.connect(inputAudioCtx.destination);
+    } catch (err: any) {
+      setError(err.message || "Failed to access microphone. Please ensure permissions are granted.");
+      setIsConnecting(false);
+      if (inputAudioCtx) inputAudioCtx.close();
+      if (outputAudioCtx) outputAudioCtx.close();
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      return;
+    }
+
     try {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const wsUrl = `${protocol}//${window.location.host}/live`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
-      ws.onopen = async () => {
+      ws.onopen = () => {
         setIsConnected(true);
         setIsConnecting(false);
         
-        // Input setup (microphone)
-        const inputAudioCtx = new AudioContext({ sampleRate: 16000 });
         inputAudioCtxRef.current = inputAudioCtx;
-        
-        // Output setup (speaker)
-        const outputAudioCtx = new AudioContext({ sampleRate: 24000 });
         outputAudioCtxRef.current = outputAudioCtx;
+        streamRef.current = stream;
+        processorRef.current = processor;
         nextStartTimeRef.current = 0;
 
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        streamRef.current = stream;
-        
-        const source = inputAudioCtx.createMediaStreamSource(stream);
-        const processor = inputAudioCtx.createScriptProcessor(4096, 1, 1);
-        processorRef.current = processor;
-        
-        source.connect(processor);
-        processor.connect(inputAudioCtx.destination);
-
-        processor.onaudioprocess = (e) => {
+        processor!.onaudioprocess = (e) => {
           if (ws.readyState === WebSocket.OPEN) {
             const channelData = e.inputBuffer.getChannelData(0);
             const base64 = pcmToBase64(channelData);
@@ -220,50 +234,49 @@ export function LiveVoiceAssistant({
       };
 
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.error) {
-          setError(msg.error);
-          disconnect();
-          return;
-        }
-        
-        if (msg.audio) {
-          playAudioChunk(msg.audio);
-        }
-        
-        if (msg.interrupted) {
-          // Reset playback queue
-          if (outputAudioCtxRef.current) {
-            nextStartTimeRef.current = outputAudioCtxRef.current.currentTime;
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.error) {
+            setError(msg.error);
+            disconnect();
+            return;
           }
-        }
-        
-        if (msg.inputTranscript) {
-          // Gemini sends incremental transcription for the current user turn.
-          // Each message contains the full text so far for the current turn.
-          setCurrentInputFragment(msg.inputTranscript);
-          lastInputRef.current = msg.inputTranscript;
-        }
-        if (msg.outputTranscript) {
-          // Same for assistant output
-          setCurrentOutputFragment(msg.outputTranscript);
-          lastOutputRef.current = msg.outputTranscript;
-        }
-        if (msg.turnComplete) {
-          // Commit accumulated fragments as complete turns
-          if (lastInputRef.current.trim()) {
-            setInputTranscripts(prev => [...prev, lastInputRef.current.trim()]);
-            setCurrentInputFragment("");
-            lastInputRef.current = "";
+          
+          if (msg.audio) {
+            playAudioChunk(msg.audio);
           }
-          if (lastOutputRef.current.trim()) {
-            setOutputTranscripts(prev => [...prev, lastOutputRef.current.trim()]);
-            setCurrentOutputFragment("");
-            lastOutputRef.current = "";
+          
+          if (msg.interrupted) {
+            if (outputAudioCtxRef.current) {
+              nextStartTimeRef.current = outputAudioCtxRef.current.currentTime;
+            }
           }
-        }
-        if (msg.dashboardUpdate) {
-          setDashboard(msg.dashboardUpdate);
+          
+          if (msg.inputTranscript) {
+            setCurrentInputFragment(msg.inputTranscript);
+            lastInputRef.current = msg.inputTranscript;
+          }
+          if (msg.outputTranscript) {
+            setCurrentOutputFragment(msg.outputTranscript);
+            lastOutputRef.current = msg.outputTranscript;
+          }
+          if (msg.turnComplete) {
+            if (lastInputRef.current.trim()) {
+              setInputTranscripts(prev => [...prev, lastInputRef.current.trim()]);
+              setCurrentInputFragment("");
+              lastInputRef.current = "";
+            }
+            if (lastOutputRef.current.trim()) {
+              setOutputTranscripts(prev => [...prev, lastOutputRef.current.trim()]);
+              setCurrentOutputFragment("");
+              lastOutputRef.current = "";
+            }
+          }
+          if (msg.dashboardUpdate) {
+            setDashboard(msg.dashboardUpdate);
+          }
+        } catch (parseErr) {
+          console.error("Error parsing WebSocket message:", parseErr);
         }
       };
 
@@ -272,13 +285,17 @@ export function LiveVoiceAssistant({
       };
       
       ws.onerror = () => {
-        setError("WebSocket error occurred");
+        setError("WebSocket connection error. Is the server running with a valid GEMINI_API_KEY?");
         disconnect();
       };
       
     } catch (err: any) {
-      setError(err.message || "Failed to connect");
-      disconnect();
+      setError(err.message || "Failed to connect to server");
+      // Clean up audio resources
+      if (inputAudioCtx) inputAudioCtx.close();
+      if (outputAudioCtx) outputAudioCtx.close();
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      setIsConnecting(false);
     }
   };
 

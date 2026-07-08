@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swasthya Sarathi — AI Triage & District Health Monitoring</title>
+    <meta name="description"
+        content="Swasthya Sarathi is an AI-powered healthcare triage and resource-monitoring platform for District Health Departments.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0f0e;
+            --surface: #111917;
+            --surface-2: #0e1513;
+            --border: rgba(234, 242, 239, 0.09);
+            --border-strong: rgba(234, 242, 239, 0.18);
+            --text: #eaf2ef;
+            --text-muted: #8ca39c;
+            --accent: #2fe6d2;
+            --accent-dim: rgba(47, 230, 210, 0.12);
+            --red: #fb6a5e;
+            --amber: #ffb13d;
+            --green: #4ade80;
+            --font-display: 'Space Grotesk', sans-serif;
+            --font-body: 'Inter', sans-serif;
+            --font-mono: 'IBM Plex Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font-body);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 900px 500px at 15% -5%, rgba(47, 230, 210, 0.07), transparent 60%),
+                radial-gradient(ellipse 700px 500px at 100% 10%, rgba(251, 106, 94, 0.05), transparent 60%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .wrap {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 0 28px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ---------- NAV ---------- */
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            backdrop-filter: blur(14px);
+            background: rgba(10, 15, 14, 0.72);
+            border-bottom: 1px solid transparent;
+            transition: border-color .3s ease, background .3s ease;
+        }
+
+        nav.scrolled {
+            border-bottom-color: var(--border);
+        }
+
+        nav .wrap {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 68px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 1.05rem;
+            letter-spacing: 0.01em;
+        }
+
+        .brand-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-dim), 0 0 14px var(--accent);
+            animation: dotpulse 2.4s ease-in-out infinite;
+        }
+
+        @keyframes dotpulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.25);
+                opacity: 0.75;
+            }
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 30px;
+            font-size: 0.88rem;
+            color: var(--text-muted);
+        }
+
+        .nav-links a {
+            transition: color .2s ease;
+            position: relative;
+        }
+
+        .nav-links a:hover {
+            color: var(--text);
+        }
+
+        .nav-cta {
+            font-size: 0.82rem;
+            font-family: var(--font-mono);
+            padding: 8px 16px;
+            border: 1px solid var(--border-strong);
+            border-radius: 6px;
+            color: var(--text);
+            transition: all .2s ease;
+        }
+
+        .nav-cta:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-dim);
+        }
+
+        @media (max-width: 720px) {
+            .nav-links {
+                display: none;
+            }
+        }
+
+        /* ---------- HERO ---------- */
+        header.hero {
+            padding: 100px 0 60px;
+            position: relative;
+        }
+
+        .eyebrow {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            letter-spacing: 0.12em;
+            color: var(--accent);
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 22px;
+            opacity: 0;
+            animation: rise .7s ease forwards .1s;
+        }
+
+        .eyebrow::before {
+            content: "●";
+            font-size: 0.6rem;
+            color: var(--green);
+        }
+
+        h1.title {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: clamp(2.4rem, 6vw, 4.2rem);
+            line-height: 1.05;
+            letter-spacing: -0.01em;
+            max-width: 820px;
+            opacity: 0;
+            animation: rise .7s ease forwards .2s;
+        }
+
+        .title .devanagari {
+            display: block;
+            font-size: 0.42em;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            letter-spacing: 0.02em;
+        }
+
+        .title .grad {
+            background: linear-gradient(100deg, var(--accent), #7ef0e2 45%, var(--text));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        p.lede {
+            max-width: 620px;
+            margin-top: 22px;
+            color: var(--text-muted);
+            font-size: 1.08rem;
+            opacity: 0;
+            animation: rise .7s ease forwards .32s;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 14px;
+            margin-top: 34px;
+            flex-wrap: wrap;
+            opacity: 0;
+            animation: rise .7s ease forwards .42s;
+        }
+
+        .btn {
+            font-family: var(--font-mono);
+            font-size: 0.86rem;
+            padding: 13px 22px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #06110f;
+            font-weight: 600;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 26px -6px rgba(47, 230, 210, 0.45);
+        }
+
+        .btn-ghost {
+            border: 1px solid var(--border-strong);
+            color: var(--text);
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+            transform: translateY(-2px);
+        }
+
+        @keyframes rise {
+            from {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ---------- VITALS / ECG SIGNATURE ---------- */
+        .vitals {
+            margin-top: 56px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: linear-gradient(180deg, var(--surface), var(--surface-2));
+            padding: 26px 26px 18px;
+            opacity: 0;
+            animation: rise .8s ease forwards .55s;
+        }
+
+        .vitals-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .tier-key {
+            display: flex;
+            gap: 16px;
+        }
+
+        .tier-key span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tier-key i {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .tier-key .r i {
+            background: var(--red);
+        }
+
+        .tier-key .a i {
+            background: var(--amber);
+        }
+
+        .tier-key .g i {
+            background: var(--green);
+        }
+
+        .ecg-box {
+            position: relative;
+            height: 130px;
+        }
+
+        .ecg-svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .ecg-path {
+            fill: none;
+            stroke: var(--border-strong);
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .ecg-path.draw {
+            stroke: var(--accent);
+            stroke-dasharray: 1400;
+            stroke-dashoffset: 1400;
+            animation: draw 2.2s ease-out .8s forwards;
+            filter: drop-shadow(0 0 6px rgba(47, 230, 210, 0.5));
+        }
+
+        @keyframes draw {
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        .pulse-dot {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--red);
+            box-shadow: 0 0 12px currentColor;
+            offset-path: path("M0,65 L120,65 L138,30 L156,102 L174,65 L230,65 L248,18 L266,112 L284,65 L340,65 L356,40 L374,90 L392,65 L900,65");
+            animation: travel 4.5s linear infinite, tint 4.5s linear infinite;
+        }
+
+        @keyframes travel {
+            from {
+                offset-distance: 0%;
+            }
+
+            to {
+                offset-distance: 100%;
+            }
+        }
+
+        @keyframes tint {
+
+            0%,
+            32% {
+                background: var(--red);
+                color: var(--red);
+            }
+
+            33%,
+            65% {
+                background: var(--amber);
+                color: var(--amber);
+            }
+
+            66%,
+            100% {
+                background: var(--green);
+                color: var(--green);
+            }
+        }
+
+        .stat-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            background: var(--border);
+            margin-top: 18px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .stat {
+            background: var(--surface-2);
+            padding: 16px 18px;
+        }
+
+        .stat b {
+            display: block;
+            font-family: var(--font-mono);
+            font-size: 1.5rem;
+            color: var(--text);
+        }
+
+        .stat span {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        @media (max-width: 640px) {
+            .stat-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ---------- SECTION SHARED ---------- */
+        section {
+            padding: 100px 0;
+            position: relative;
+        }
+
+        .section-head {
+            max-width: 620px;
+            margin-bottom: 52px;
+        }
+
+        .section-label {
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            letter-spacing: 0.1em;
+            color: var(--accent);
+            text-transform: uppercase;
+            margin-bottom: 14px;
+            display: block;
+        }
+
+        h2 {
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: clamp(1.7rem, 3.4vw, 2.3rem);
+            letter-spacing: -0.01em;
+        }
+
+        .section-head p {
+            color: var(--text-muted);
+            margin-top: 12px;
+        }
+
+        .reveal {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: opacity .7s ease, transform .7s ease;
+        }
+
+        .reveal.in {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* ---------- FEATURES ---------- */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        @media (max-width: 900px) {
+            .feature-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 620px) {
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface);
+            padding: 26px;
+            transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: var(--border-strong);
+            box-shadow: 0 16px 40px -18px rgba(47, 230, 210, 0.25);
+        }
+
+        .card .idx {
+            font-family: var(--font-mono);
+            font-size: 0.74rem;
+            color: var(--text-muted);
+        }
+
+        .card .icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 9px;
+            background: var(--accent-dim);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 14px 0 16px;
+            color: var(--accent);
+        }
+
+        .card h3 {
+            font-family: var(--font-display);
+            font-size: 1.08rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .card p {
+            color: var(--text-muted);
+            font-size: 0.92rem;
+        }
+
+        .card.wide {
+            grid-column: span 3;
+        }
+
+        @media (max-width: 900px) {
+            .card.wide {
+                grid-column: span 2;
+            }
+        }
+
+        @media (max-width: 620px) {
+            .card.wide {
+                grid-column: span 1;
+            }
+        }
+
+        /* ---------- WORKFLOW ---------- */
+        .timeline {
+            position: relative;
+            padding-left: 46px;
+        }
+
+        .timeline::before {
+            content: "";
+            position: absolute;
+            left: 13px;
+            top: 6px;
+            bottom: 6px;
+            width: 1px;
+            background: linear-gradient(var(--accent), var(--border) 90%);
+        }
+
+        .step {
+            position: relative;
+            padding-bottom: 44px;
+        }
+
+        .step:last-child {
+            padding-bottom: 0;
+        }
+
+        .step::before {
+            content: attr(data-n);
+            position: absolute;
+            left: -46px;
+            top: 0;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--surface);
+            border: 1px solid var(--border-strong);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            color: var(--accent);
+        }
+
+        .step h4 {
+            font-family: var(--font-display);
+            font-size: 1.05rem;
+            margin-bottom: 6px;
+        }
+
+        .step p {
+            color: var(--text-muted);
+            font-size: 0.94rem;
+            max-width: 560px;
+        }
+
+        .step .who {
+            display: inline-block;
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--accent);
+            background: var(--accent-dim);
+            border: 1px solid var(--border);
+            padding: 3px 9px;
+            border-radius: 5px;
+            margin-bottom: 8px;
+        }
+
+        /* ---------- STACK ---------- */
+        .stack-groups {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 22px;
+        }
+
+        @media (max-width: 800px) {
+            .stack-groups {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .stack-group h5 {
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .chip {
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 7px 12px;
+            color: var(--text);
+            transition: border-color .2s ease, transform .2s ease;
+        }
+
+        .chip:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        /* ---------- FOOTER ---------- */
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 40px 0;
+        }
+
+        footer .wrap {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 14px;
+        }
+
+        footer p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        footer .foot-links {
+            display: flex;
+            gap: 20px;
+            font-size: 0.85rem;
+        }
+
+        footer a:hover {
+            color: var(--accent);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation: none !important;
+                transition: none !important;
+            }
+
+            .ecg-path.draw {
+                stroke-dashoffset: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav id="nav">
+        <div class="wrap">
+            <div class="brand"><span class="brand-dot"></span>Swasthya Sarathi</div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#workflow">Workflow</a>
+                <a href="#stack">Stack</a>
+            </div>
+            <a class="nav-cta" href="https://github.com/sourya2007/swasthya-sarathi" target="_blank" rel="noopener">View
+                Source ↗</a>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="wrap">
+            <div class="eyebrow">District Health · AI Triage Platform</div>
+            <h1 class="title">
+                <span class="devanagari">स्वास्थ्य सारथी</span>
+                <span class="grad">Swasthya Sarathi</span>
+            </h1>
+            <p class="lede">
+                An AI-powered triage and resource-monitoring platform built for District Health Departments —
+                classifying patients in real time and keeping every clinic's beds, staff, and medicine stock visible
+                before a shortage becomes a crisis.
+            </p>
+            <div class="hero-actions">
+                <a class="btn btn-primary" href="https://github.com/sourya2007/swasthya-sarathi" target="_blank"
+                    rel="noopener">Explore the Repository</a>
+                <a class="btn btn-ghost" href="#features">See What It Does</a>
+            </div>
+
+            <div class="vitals">
+                <div class="vitals-head">
+                    <span>LIVE TRIAGE STREAM</span>
+                    <div class="tier-key">
+                        <span class="r"><i></i>Critical</span>
+                        <span class="a"><i></i>Warning</span>
+                        <span class="g"><i></i>Routine</span>
+                    </div>
+                </div>
+                <div class="ecg-box">
+                    <svg class="ecg-svg" viewBox="0 0 900 130" preserveAspectRatio="none">
+                        <path class="ecg-path"
+                            d="M0,65 L120,65 L138,30 L156,102 L174,65 L230,65 L248,18 L266,112 L284,65 L340,65 L356,40 L374,90 L392,65 L900,65" />
+                        <path class="ecg-path draw"
+                            d="M0,65 L120,65 L138,30 L156,102 L174,65 L230,65 L248,18 L266,112 L284,65 L340,65 L356,40 L374,90 L392,65 L900,65" />
+                    </svg>
+                    <div class="pulse-dot"></div>
+                </div>
+                <div class="stat-row">
+                    <div class="stat"><b>3</b><span>triage tiers, auto-classified by Gemini AI</span></div>
+                    <div class="stat"><b>48h</b><span>shortage forecast window for medicine stock</span></div>
+                    <div class="stat"><b>EN / MR</b><span>bilingual input &amp; output for frontline workers</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section id="features">
+        <div class="wrap">
+            <div class="section-head reveal">
+                <span class="section-label">Features &amp; Functionality</span>
+                <h2>Five systems, one district-wide picture</h2>
+                <p>From the moment a patient describes a symptom to the moment a district officer dispatches supplies,
+                    everything routes through one connected platform.</p>
+            </div>
+            <div class="feature-grid">
+
+                <div class="card reveal">
+                    <div class="idx">01</div>
+                    <div class="icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M3 12h4l2 8 4-16 2 8h6" />
+                        </svg>
+                    </div>
+                    <h3>AI-Powered Patient Triage</h3>
+                    <p>Gemini AI reads typed or voice-transcribed symptoms and classifies each case RED, AMBER, or GREEN
+                        — with an immediate relocation directive like an ICU bed number for critical cases.</p>
+                </div>
+
+                <div class="card reveal">
+                    <div class="idx">02</div>
+                    <div class="icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M12 2 2 7l10 5 10-5-10-5Z" />
+                            <path d="M2 17l10 5 10-5" />
+                            <path d="M2 12l10 5 10-5" />
+                        </svg>
+                    </div>
+                    <h3>Live Resource Monitoring</h3>
+                    <p>A real-time grid and map view of beds, doctors, and medicine across every PHC and CHC, with
+                        24-hour trend charts built on Recharts.</p>
+                </div>
+
+                <div class="card reveal">
+                    <div class="idx">03</div>
+                    <div class="icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                            <line x1="12" y1="9" x2="12" y2="13" />
+                            <line x1="12" y1="17" x2="12.01" y2="17" />
+                        </svg>
+                    </div>
+                    <h3>District Management Board</h3>
+                    <p>Automatic critical alerts when beds hit zero or stock falls below threshold, plus manually
+                        reported issues, all on one dashboard for district officers.</p>
+                </div>
+
+                <div class="card reveal">
+                    <div class="idx">04</div>
+                    <div class="icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <rect x="3" y="11" width="18" height="10" rx="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                    </div>
+                    <h3>Authentication &amp; Roles</h3>
+                    <p>Firebase Authentication with role-based views — Centre Admins and District Officers each see only
+                        what their role needs.</p>
+                </div>
+
+                <div class="card reveal">
+                    <div class="idx">05</div>
+                    <div class="icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <ellipse cx="12" cy="5" rx="9" ry="3" />
+                            <path d="M3 5v14a9 3 0 0 0 18 0V5" />
+                            <path d="M3 12a9 3 0 0 0 18 0" />
+                        </svg>
+                    </div>
+                    <h3>Data Persistence</h3>
+                    <p>Every triage record and management report is stored in Firebase Firestore, enabling historical
+                        auditing and longitudinal analysis.</p>
+                </div>
+
+                <div class="card wide reveal">
+                    <div class="idx">06</div>
+                    <div class="icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="9" />
+                            <path d="M12 3v18M3 12h18" />
+                        </svg>
+                    </div>
+                    <h3>Predictive Analytics</h3>
+                    <p>Beyond live snapshots, current consumption rates feed a 48-hour shortage forecast — so a clinic
+                        can request supplies before a bed or medicine actually runs out, not after.</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <section id="workflow">
+        <div class="wrap">
+            <div class="section-head reveal">
+                <span class="section-label">End-to-End Workflow</span>
+                <h2>How a case moves through the system</h2>
+                <p>Four roles, one continuous path from a patient's first symptom to a district-level decision.</p>
+            </div>
+            <div class="timeline">
+                <div class="step reveal" data-n="1">
+                    <span class="who">Any user</span>
+                    <h4>Authentication</h4>
+                    <p>The user signs in and their role determines what they can see — frontline worker, centre admin,
+                        or district officer.</p>
+                </div>
+                <div class="step reveal" data-n="2">
+                    <span class="who">Frontline workers</span>
+                    <h4>Triage</h4>
+                    <p>A patient arrives, symptoms are entered by text or voice, and the AI instantly returns a triage
+                        tier, action plan, and relocation directive. The record saves to the cloud automatically.</p>
+                </div>
+                <div class="step reveal" data-n="3">
+                    <span class="who">Centre admins</span>
+                    <h4>Resource Tracking</h4>
+                    <p>Admins check the Live Resource Grid for their own or nearby clinics, then switch to the Trends
+                        tab to request supplies ahead of the 48-hour forecast.</p>
+                </div>
+                <div class="step reveal" data-n="4">
+                    <span class="who">District officers</span>
+                    <h4>District Management</h4>
+                    <p>Officers watch the District Management Board for real-time alerts on full beds or critical stock,
+                        review manual reports, and dispatch ambulances or supplies.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="stack">
+        <div class="wrap">
+            <div class="section-head reveal">
+                <span class="section-label">Technology Stack</span>
+                <h2>Built on</h2>
+            </div>
+            <div class="stack-groups">
+                <div class="stack-group reveal">
+                    <h5>Frontend</h5>
+                    <div class="chips">
+                        <span class="chip">React (Next.js App Router)</span>
+                        <span class="chip">TypeScript</span>
+                        <span class="chip">Tailwind CSS</span>
+                        <span class="chip">Lucide React</span>
+                    </div>
+                </div>
+                <div class="stack-group reveal">
+                    <h5>Data &amp; Visualization</h5>
+                    <div class="chips">
+                        <span class="chip">Recharts</span>
+                        <span class="chip">Google Maps (iframe)</span>
+                    </div>
+                </div>
+                <div class="stack-group reveal">
+                    <h5>Backend &amp; Data</h5>
+                    <div class="chips">
+                        <span class="chip">Google Gemini API</span>
+                        <span class="chip">Firebase Firestore</span>
+                        <span class="chip">Firebase Authentication</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="wrap">
+            <p>Swasthya Sarathi — an AI healthcare triage &amp; district monitoring platform.</p>
+            <div class="foot-links">
+                <a href="https://github.com/sourya2007/swasthya-sarathi" target="_blank" rel="noopener">GitHub
+                    Repository</a>
+                <a href="https://github.com/sourya2007" target="_blank" rel="noopener">@sourya2007</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Nav shadow on scroll
+        const nav = document.getElementById('nav');
+        window.addEventListener('scroll', () => {
+            nav.classList.toggle('scrolled', window.scrollY > 12);
+        });
+
+        // Scroll reveal
+        const revealEls = document.querySelectorAll('.reveal');
+        const io = new IntersectionObserver((entries) => {
+            entries.forEach((entry, i) => {
+                if (entry.isIntersecting) {
+                    setTimeout(() => entry.target.classList.add('in'), i * 60);
+                    io.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.15 });
+        revealEls.forEach(el => io.observe(el));
+    </script>
+
+</body>
+
+</html>

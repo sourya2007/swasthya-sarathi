@@ -400,7 +400,13 @@ function SwasthyaSarathiPageContent() {
       });
 
       if (!res.ok) {
-        throw new Error("Failed to process request.");
+        let errMsg = "Failed to process request.";
+        try {
+          const errBody = await res.json();
+          if (errBody.error) errMsg = errBody.error;
+          if (errBody.details) errMsg += ` ${errBody.details}`;
+        } catch (_) {}
+        throw new Error(errMsg);
       }
 
       const data = await res.json();

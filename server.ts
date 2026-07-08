@@ -4,8 +4,40 @@ import { GoogleGenAI, LiveServerMessage } from "@google/genai";
 import path from "path";
 import fs from "fs";
 
+// Load .env file manually (no dotenv dependency needed)
+try {
+  const envPath = path.join(process.cwd(), ".env");
+  if (fs.existsSync(envPath)) {
+    const lines = fs.readFileSync(envPath, "utf-8").split("\n");
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIndex = trimmed.indexOf("=");
+      if (eqIndex === -1) continue;
+      const key = trimmed.slice(0, eqIndex).trim();
+      let value = trimmed.slice(eqIndex + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      if (!process.env[key]) {
+        process.env[key] = value;
+      }
+    }
+    console.log("> Loaded environment variables from .env file");
+  } else {
+    console.warn("> Warning: No .env file found. GEMINI_API_KEY must be set in the environment.");
+  }
+} catch (e) {
+  console.warn("> Warning: Could not load .env file:", e);
+}
+
 const isDev = process.env.NODE_ENV === "development" || process.argv.includes("--dev");
 const port = parseInt(process.env.PORT || "3000", 10);
+
+if (!process.env.GEMINI_API_KEY) {
+  console.error("> FATAL: GEMINI_API_KEY is not set. Triage and Live Assistant features will not work.");
+  console.error("> Create a .env file in the project root with: GEMINI_API_KEY=your_key_here");
+}
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -321,7 +353,7 @@ async function startServer() {
       return res.json(JSON.parse(text));
     } catch (error: any) {
       console.error("Triage API Error:", error?.message || error);
-      return res.status(500).json({ error: error?.message || "Failed to process the triage request." });
+      return res.status(500).json({ error: error?.message || "Failed to process the triage request.", details: "Check that GEMINI_API_KEY is set correctly and the Gemini API is accessible." });
     }
   });
 
@@ -405,7 +437,7 @@ async function startServer() {
       return res.json(JSON.parse(text));
     } catch (error: any) {
       console.error("Management API Error:", error?.message || error);
-      return res.status(500).json({ error: error?.message || "Failed to process the management request." });
+      return res.status(500).json({ error: error?.message || "Failed to process the management request.", details: "Check that GEMINI_API_KEY is set correctly and the Gemini API is accessible." });
     }
   });
 
