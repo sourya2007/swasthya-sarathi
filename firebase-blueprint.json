@@ -1,0 +1,100 @@
+{
+  "entities": {
+    "TriageRecord": {
+      "title": "TriageRecord",
+      "description": "A patient triage analysis record saved by a healthcare worker",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Email of the user who saved this record"
+        },
+        "description": {
+          "type": "string",
+          "description": "Original raw patient symptoms description"
+        },
+        "triageStatus": {
+          "type": "string",
+          "description": "AI predicted triage level: RED, AMBER, GREEN"
+        },
+        "languageDetected": {
+          "type": "string",
+          "description": "Language of the original description"
+        },
+        "estimatedDuration": {
+          "type": "string",
+          "description": "Estimated response or consultation duration"
+        },
+        "extractedSymptoms": {
+          "type": "array",
+          "description": "List of parsed clinical symptoms"
+        },
+        "suggestedAction": {
+          "type": "string",
+          "description": "Actionable guide or medical plan"
+        },
+        "administrativeAlertFlags": {
+          "type": "array",
+          "description": "Alert flags or administrative tasks"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Date and time the record was created"
+        }
+      },
+      "required": ["userId", "description", "triageStatus", "timestamp"]
+    },
+    "ManagementRecord": {
+      "title": "ManagementRecord",
+      "description": "A district health centre management report saved by an administrator",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Email of the administrator who saved this report"
+        },
+        "description": {
+          "type": "string",
+          "description": "Original raw center status report text"
+        },
+        "metrics": {
+          "type": "object",
+          "description": "Daily metrics: footfall, beds, doctors, tests"
+        },
+        "stockWarnings": {
+          "type": "array",
+          "description": "Early stock-out warnings predicted by AI"
+        },
+        "demandForecasts": {
+          "type": "array",
+          "description": "Demand surge forecasts predicted by AI"
+        },
+        "redistributionRecommendations": {
+          "type": "array",
+          "description": "AI recommendations for resource movement"
+        },
+        "flaggedCentres": {
+          "type": "array",
+          "description": "Flagged warning health centres and reasons"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Date and time the report was created"
+        }
+      },
+      "required": ["userId", "description", "metrics", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/triage_records/{recordId}": {
+      "schema": "TriageRecord",
+      "description": "Collection of patient triage records saved by authenticated users"
+    },
+    "/management_records/{recordId}": {
+      "schema": "ManagementRecord",
+      "description": "Collection of center management reports saved by authenticated administrators"
+    }
+  }
+}

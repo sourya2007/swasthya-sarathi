@@ -1,0 +1,6 @@
+{
+  "name": "Swasthya Sarathi",
+  "description": "AI Public Healthcare Triage System for Rural PHCs",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
