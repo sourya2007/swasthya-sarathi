@@ -3,7 +3,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOu
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCbAnFEGLprOfckoMUf6r2DkvwhxoTDClQ",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
   authDomain: "essential-trail-s07pf.firebaseapp.com",
   projectId: "essential-trail-s07pf",
   storageBucket: "essential-trail-s07pf.firebasestorage.app",
