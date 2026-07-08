@@ -4,7 +4,7 @@ import { GoogleGenAI, LiveServerMessage } from "@google/genai";
 import path from "path";
 import fs from "fs";
 
-const isDev = process.env.NODE_ENV === "development";
+const isDev = process.env.NODE_ENV === "development" || process.argv.includes("--dev");
 const port = parseInt(process.env.PORT || "3000", 10);
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
