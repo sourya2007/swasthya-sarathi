@@ -187,6 +187,8 @@ function SwasthyaSarathiPageContent() {
   const [selectedRole, setSelectedRole] = useState<"Centre Admin" | "Doctor" | "Patient">("Centre Admin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [isLoginLoading, setIsLoginLoading] = useState(false);
   const baseT = UI_TRANSLATIONS[preferredLanguage as keyof typeof UI_TRANSLATIONS] || UI_TRANSLATIONS.English;
 
@@ -513,23 +515,31 @@ function SwasthyaSarathiPageContent() {
        
       await signIn(apiRole);
     } else {
-      if (!email || !password) {
-        alert("Please enter email and password");
+      if (!email || !password || (isSignUpMode && !name)) {
+        alert("Please fill in all required fields");
         setIsLoginLoading(false);
         return;
       }
       try {
-        // Attempt firebase sign in with email
-         
         let firebaseUser;
-        try {
-          const cred = await signInWithEmailAndPassword(auth, email, password);
-          firebaseUser = cred.user;
-        } catch (err: any) {
-          if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-             const cred = await createUserWithEmailAndPassword(auth, email, password);
-             firebaseUser = cred.user;
-          } else {
+        if (isSignUpMode) {
+          try {
+            const cred = await createUserWithEmailAndPassword(auth, email, password);
+            firebaseUser = cred.user;
+          } catch (err: any) {
+            if (err.code === 'auth/email-already-in-use') {
+              alert("Email is already in use. Please sign in instead.");
+            } else {
+              throw err;
+            }
+            setIsLoginLoading(false);
+            return;
+          }
+        } else {
+          try {
+            const cred = await signInWithEmailAndPassword(auth, email, password);
+            firebaseUser = cred.user;
+          } catch (err: any) {
              throw err;
           }
         }
@@ -543,15 +553,15 @@ function SwasthyaSarathiPageContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email: firebaseUser.email,
-            name: firebaseUser.displayName || email.split('@')[0],
+            name: isSignUpMode ? name : (firebaseUser.displayName || email.split('@')[0]),
             image: firebaseUser.photoURL, 
             role: apiRole
           }),
         });
         window.location.reload();
       } catch (err) {
-        console.error("Email login failed", err);
-        alert("Login failed");
+        console.error("Email auth failed", err);
+        alert(isSignUpMode ? "Sign up failed" : "Sign in failed");
       }
     }
     setIsLoginLoading(false);
@@ -583,6 +593,15 @@ function SwasthyaSarathiPageContent() {
           </div>
 
           <form onSubmit={(e) => handleLoginSubmit(e, false)} className="flex flex-col gap-3 mb-6">
+            {isSignUpMode && (
+              <input 
+                type="text" 
+                placeholder="Full Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+            )}
             <input 
               type="email" 
               placeholder="Email address"
@@ -602,8 +621,17 @@ function SwasthyaSarathiPageContent() {
               disabled={isLoginLoading}
               className="w-full bg-slate-900 text-white font-bold text-sm py-3 rounded-xl hover:bg-slate-800 active:scale-95 transition-all mt-2"
             >
-              {isLoginLoading ? "Signing in..." : "Sign in with Email"}
+              {isLoginLoading ? "Processing..." : (isSignUpMode ? "Sign Up with Email" : "Sign In with Email")}
             </button>
+            <div className="text-center mt-2">
+              <button 
+                type="button" 
+                onClick={() => setIsSignUpMode(!isSignUpMode)}
+                className="text-xs text-indigo-600 font-semibold hover:underline"
+              >
+                {isSignUpMode ? "Already have an account? Sign In" : "Need an account? Sign Up"}
+              </button>
+            </div>
           </form>
           
           <div className="relative mb-6">
