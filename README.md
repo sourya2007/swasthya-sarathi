@@ -1,4 +1,4 @@
-![Swasthya Sarathi](assets/banner.jpeg)
+![Swasthya Sarathi](assets/Banner.jpeg)
 # Swasthya Sarathi (स्वास्थ्य सारथी)
 
 Swasthya Sarathi is an intelligent, AI-powered healthcare management and triage platform designed for District Health Departments. It streamlines patient triage, health centre resource monitoring, and district-wide administration, especially in resource-constrained environments.
