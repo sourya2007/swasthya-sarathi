@@ -4,6 +4,41 @@ import { GoogleGenAI, LiveServerMessage } from "@google/genai";
 import path from "path";
 import fs from "fs";
 
+const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
+
+async function callOpenRouter(systemPrompt: string, userMessage: string, model?: string): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
+
+  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+      "HTTP-Referer": "https://swasthya-sarathi.onrender.com",
+      "X-Title": "Swasthya Sarathi",
+    },
+    body: JSON.stringify({
+      model: model || process.env.OPENROUTER_MODEL || "qwen/qwen3-coder:free",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+      temperature: 0.1,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`OpenRouter error (${res.status}): ${err}`);
+  }
+
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error("Empty response from OpenRouter");
+  return text;
+}
+
 // Load .env file manually (no dotenv dependency needed)
 try {
   const envPath = path.join(process.cwd(), ".env");
@@ -34,12 +69,13 @@ try {
 const isDev = process.env.NODE_ENV === "development" || process.argv.includes("--dev");
 const port = parseInt(process.env.PORT || "3000", 10);
 
-if (!process.env.GEMINI_API_KEY) {
-  console.error("> FATAL: GEMINI_API_KEY is not set. Triage and Live Assistant features will not work.");
-  console.error("> Create a .env file in the project root with: GEMINI_API_KEY=your_key_here");
+if (!process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY) {
+  console.error("> FATAL: Neither GEMINI_API_KEY nor OPENROUTER_API_KEY is set. AI features will not work.");
+} else if (process.env.OPENROUTER_API_KEY) {
+  console.log("> OpenRouter API key found — triage/management will use OpenRouter.");
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
 
 async function startServer() {
   const server = express();
@@ -312,48 +348,49 @@ async function startServer() {
   AMBER: Urgent, needs care soon but not immediately life-threatening.
   GREEN: Non-urgent, routine care or self-management.`;
 
-  server.post("/api/triage", async (req, res) => {
-    try {
-      const { description, audio, preferredLanguage } = req.body;
-
-      let contents: any[] = [];
-      if (preferredLanguage) {
-        contents.push(`Preferred Language for Output Translations: ${preferredLanguage}\n\n`);
+  async function runAITriage(systemPrompt: string, userPrompt: string): Promise<string> {
+    if (process.env.OPENROUTER_API_KEY) {
+      try {
+        return await callOpenRouter(systemPrompt, userPrompt);
+      } catch (orErr: any) {
+        console.error("OpenRouter triage failed, trying Gemini:", orErr.message);
       }
-
-      if (audio && audio.base64 && audio.mimeType) {
-        contents.push({
-          inlineData: {
-            data: audio.base64,
-            mimeType: audio.mimeType,
-          },
-        });
-        if (description) contents.push(description);
-      } else if (description && typeof description === "string") {
-        contents.push(description);
-      } else {
-        return res.status(400).json({ error: "Invalid patient data provided." });
-      }
-
+    }
+    if (ai) {
       const response = await ai.models.generateContent({
         model: "gemini-2.0-flash",
-        contents: contents,
+        contents: [userPrompt],
         config: {
-          systemInstruction: TRIAGE_PROMPT,
+          systemInstruction: systemPrompt,
           responseMimeType: "application/json",
           temperature: 0.1,
         },
       });
-
       const text = response.text;
-      if (!text) {
-        throw new Error("Empty response received from AI model.");
-      }
+      if (!text) throw new Error("Empty response from Gemini");
+      return text;
+    }
+    throw new Error("No AI provider available (set OPENROUTER_API_KEY or GEMINI_API_KEY)");
+  }
 
+  server.post("/api/triage", async (req, res) => {
+    try {
+      const { description, preferredLanguage } = req.body;
+      if (!description || typeof description !== "string") {
+        return res.status(400).json({ error: "Patient description is required." });
+      }
+      let userPrompt = preferredLanguage
+        ? `Preferred Language for Output Translations: ${preferredLanguage}\n\n${description}`
+        : description;
+
+      const text = await runAITriage(TRIAGE_PROMPT, userPrompt);
       return res.json(JSON.parse(text));
     } catch (error: any) {
       console.error("Triage API Error:", error?.message || error);
-      return res.status(500).json({ error: error?.message || "Failed to process the triage request.", details: "Check that GEMINI_API_KEY is set correctly and the Gemini API is accessible." });
+      return res.status(500).json({
+        error: error?.message || "Failed to process the triage request.",
+        details: "Check that OPENROUTER_API_KEY or GEMINI_API_KEY is set correctly.",
+      });
     }
   });
 
@@ -396,48 +433,49 @@ async function startServer() {
     }
   }`;
 
-  server.post("/api/management", async (req, res) => {
-    try {
-      const { description, audio, preferredLanguage } = req.body;
-
-      let contents: any[] = [];
-      if (preferredLanguage) {
-        contents.push(`Preferred Language for Output Translations: ${preferredLanguage}\n\n`);
+  async function runAIManagement(systemPrompt: string, userPrompt: string): Promise<string> {
+    if (process.env.OPENROUTER_API_KEY) {
+      try {
+        return await callOpenRouter(systemPrompt, userPrompt);
+      } catch (orErr: any) {
+        console.error("OpenRouter management failed, trying Gemini:", orErr.message);
       }
-
-      if (audio && audio.base64 && audio.mimeType) {
-        contents.push({
-          inlineData: {
-            data: audio.base64,
-            mimeType: audio.mimeType,
-          },
-        });
-        if (description) contents.push(description);
-      } else if (description && typeof description === "string") {
-        contents.push(description);
-      } else {
-        return res.status(400).json({ error: "Invalid management data provided." });
-      }
-
+    }
+    if (ai) {
       const response = await ai.models.generateContent({
         model: "gemini-2.0-flash",
-        contents: contents,
+        contents: [userPrompt],
         config: {
-          systemInstruction: MANAGEMENT_PROMPT,
+          systemInstruction: systemPrompt,
           responseMimeType: "application/json",
           temperature: 0.1,
         },
       });
-
       const text = response.text;
-      if (!text) {
-        throw new Error("Empty response received from AI model.");
-      }
+      if (!text) throw new Error("Empty response from Gemini");
+      return text;
+    }
+    throw new Error("No AI provider available (set OPENROUTER_API_KEY or GEMINI_API_KEY)");
+  }
 
+  server.post("/api/management", async (req, res) => {
+    try {
+      const { description, preferredLanguage } = req.body;
+      if (!description || typeof description !== "string") {
+        return res.status(400).json({ error: "Centre status description is required." });
+      }
+      let userPrompt = preferredLanguage
+        ? `Preferred Language for Output Translations: ${preferredLanguage}\n\n${description}`
+        : description;
+
+      const text = await runAIManagement(MANAGEMENT_PROMPT, userPrompt);
       return res.json(JSON.parse(text));
     } catch (error: any) {
       console.error("Management API Error:", error?.message || error);
-      return res.status(500).json({ error: error?.message || "Failed to process the management request.", details: "Check that GEMINI_API_KEY is set correctly and the Gemini API is accessible." });
+      return res.status(500).json({
+        error: error?.message || "Failed to process the management request.",
+        details: "Check that OPENROUTER_API_KEY or GEMINI_API_KEY is set correctly.",
+      });
     }
   });
 
