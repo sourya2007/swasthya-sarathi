@@ -304,7 +304,7 @@ async function startServer() {
       }
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.0-flash",
         contents: contents,
         config: {
           systemInstruction: TRIAGE_PROMPT,
@@ -320,8 +320,8 @@ async function startServer() {
 
       return res.json(JSON.parse(text));
     } catch (error: any) {
-      console.error("Triage API Error:", error);
-      return res.status(500).json({ error: "Failed to process the triage request." });
+      console.error("Triage API Error:", error?.message || error);
+      return res.status(500).json({ error: error?.message || "Failed to process the triage request." });
     }
   });
 
@@ -388,7 +388,7 @@ async function startServer() {
       }
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.0-flash",
         contents: contents,
         config: {
           systemInstruction: MANAGEMENT_PROMPT,
@@ -404,8 +404,8 @@ async function startServer() {
 
       return res.json(JSON.parse(text));
     } catch (error: any) {
-      console.error("Management API Error:", error);
-      return res.status(500).json({ error: "Failed to process the management request." });
+      console.error("Management API Error:", error?.message || error);
+      return res.status(500).json({ error: error?.message || "Failed to process the management request." });
     }
   });
 
@@ -447,7 +447,7 @@ async function startServer() {
     console.log("Client connected to Live API");
     try {
       const session = await ai.live.connect({
-        model: "gemini-3.1-flash-live-preview",
+        model: "gemini-2.0-flash-live-001",
         config: {
           responseModalities: ["AUDIO" as any],
           speechConfig: {
@@ -498,6 +498,9 @@ async function startServer() {
             }
             if (message.serverContent?.interrupted) {
               clientWs.send(JSON.stringify({ interrupted: true }));
+            }
+            if (message.serverContent?.turnComplete) {
+              clientWs.send(JSON.stringify({ turnComplete: true }));
             }
             if (message.serverContent?.inputTranscription?.text) {
               clientWs.send(JSON.stringify({ inputTranscript: message.serverContent.inputTranscription.text }));

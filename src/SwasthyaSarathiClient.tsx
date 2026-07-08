@@ -237,21 +237,25 @@ function SwasthyaSarathiPageContent() {
     let active = true;
     
     const fetchHistory = async () => {
-      // Wait for Firebase Auth to be ready
-      await new Promise<void>((resolve) => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-          unsubscribe();
-          resolve();
-        });
-      });
-
-      if (!auth.currentUser) {
-        console.warn("Firebase Auth user is not initialized, skipping Firestore fetch.");
-        return;
-      }
-
       setIsHistoryLoading(true);
       try {
+        // Wait for Firebase Auth to be ready (with timeout)
+        await Promise.race([
+          new Promise<void>((resolve) => {
+            const unsubscribe = onAuthStateChanged(auth, (user) => {
+              unsubscribe();
+              resolve();
+            });
+          }),
+          new Promise<void>((_, reject) => setTimeout(() => reject(new Error("Auth timeout")), 5000))
+        ]);
+
+        if (!auth.currentUser) {
+          console.warn("Firebase Auth user is not initialized, skipping Firestore fetch.");
+          if (active) setIsHistoryLoading(false);
+          return;
+        }
+
         if (activeTab === "TRIAGE") {
           const q = query(
             collection(db, "triage_records"),

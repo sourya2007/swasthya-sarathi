@@ -152,8 +152,10 @@ export function LiveVoiceAssistant({
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  const [inputTranscript, setInputTranscript] = useState<string>("");
-  const [outputTranscript, setOutputTranscript] = useState<string>("");
+  const [inputTranscripts, setInputTranscripts] = useState<string[]>([]);
+  const [outputTranscripts, setOutputTranscripts] = useState<string[]>([]);
+  const [currentInputFragment, setCurrentInputFragment] = useState<string>("");
+  const [currentOutputFragment, setCurrentOutputFragment] = useState<string>("");
   const [dashboard, setDashboard] = useState<DashboardUpdate | null>(null);
   
   const currentLang = (preferredLanguage as keyof typeof VOICE_TRANSLATIONS) || "English";
@@ -166,13 +168,18 @@ export function LiveVoiceAssistant({
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   
   const nextStartTimeRef = useRef<number>(0);
+  // Refs to track the latest fragment for committing on turn boundaries
+  const lastInputRef = useRef<string>("");
+  const lastOutputRef = useRef<string>("");
 
   const connect = async () => {
     setIsConnecting(true);
     setError(null);
     setDashboard(null);
-    setInputTranscript("");
-    setOutputTranscript("");
+    setInputTranscripts([]);
+    setOutputTranscripts([]);
+    setCurrentInputFragment("");
+    setCurrentOutputFragment("");
     
     try {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -232,10 +239,28 @@ export function LiveVoiceAssistant({
         }
         
         if (msg.inputTranscript) {
-          setInputTranscript(msg.inputTranscript);
+          // Gemini sends incremental transcription for the current user turn.
+          // Each message contains the full text so far for the current turn.
+          setCurrentInputFragment(msg.inputTranscript);
+          lastInputRef.current = msg.inputTranscript;
         }
         if (msg.outputTranscript) {
-          setOutputTranscript(msg.outputTranscript);
+          // Same for assistant output
+          setCurrentOutputFragment(msg.outputTranscript);
+          lastOutputRef.current = msg.outputTranscript;
+        }
+        if (msg.turnComplete) {
+          // Commit accumulated fragments as complete turns
+          if (lastInputRef.current.trim()) {
+            setInputTranscripts(prev => [...prev, lastInputRef.current.trim()]);
+            setCurrentInputFragment("");
+            lastInputRef.current = "";
+          }
+          if (lastOutputRef.current.trim()) {
+            setOutputTranscripts(prev => [...prev, lastOutputRef.current.trim()]);
+            setCurrentOutputFragment("");
+            lastOutputRef.current = "";
+          }
         }
         if (msg.dashboardUpdate) {
           setDashboard(msg.dashboardUpdate);
@@ -409,21 +434,49 @@ export function LiveVoiceAssistant({
                    {t.activeSession}
                 </div>
 
-                <div className="w-full flex flex-col gap-4 text-left">
-                   <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex flex-col gap-2 relative shadow-inner">
-                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 absolute top-3 left-4">{t.you}</span>
-                     <p className="text-sm font-medium text-slate-700 mt-4 min-h-[1.25rem]">
-                       {inputTranscript || <span className="text-slate-300 italic">{t.listening}</span>}
-                     </p>
-                   </div>
-                   
-                   <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex flex-col gap-2 relative shadow-inner">
-                     <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 absolute top-3 left-4">{t.assistant}</span>
-                     <p className="text-sm font-medium text-indigo-900 mt-4 min-h-[1.25rem]">
-                       {outputTranscript || <span className="text-indigo-300 italic">{t.thinking}</span>}
-                     </p>
-                   </div>
-                </div>
+                <div className="w-full flex flex-col gap-4 text-left max-h-[300px] overflow-y-auto">
+                   {/* Render completed turns interleaved */}
+                   {(() => {
+                     const maxLen = Math.max(inputTranscripts.length, outputTranscripts.length);
+                     const turns: React.ReactNode[] = [];
+                     for (let i = 0; i < maxLen; i++) {
+                       if (i < inputTranscripts.length) {
+                         turns.push(
+                           <div key={`in-${i}`} className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex flex-col gap-1 shadow-inner">
+                             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t.you}</span>
+                             <p className="text-sm font-medium text-slate-700">{inputTranscripts[i]}</p>
+                           </div>
+                         );
+                       }
+                       if (i < outputTranscripts.length) {
+                         turns.push(
+                           <div key={`out-${i}`} className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex flex-col gap-1 shadow-inner">
+                             <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">{t.assistant}</span>
+                             <p className="text-sm font-medium text-indigo-900">{outputTranscripts[i]}</p>
+                           </div>
+                         );
+                       }
+                     }
+                     return turns;
+                   })()}
+                   {/* Current in-progress fragments */}
+                   {(currentInputFragment || currentOutputFragment || inputTranscripts.length === 0) && (
+                     <>
+                       <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex flex-col gap-1 shadow-inner">
+                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t.you}</span>
+                         <p className="text-sm font-medium text-slate-700 min-h-[1.25rem]">
+                           {currentInputFragment || <span className="text-slate-300 italic">{t.listening}</span>}
+                         </p>
+                       </div>
+                       <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex flex-col gap-1 shadow-inner">
+                         <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">{t.assistant}</span>
+                         <p className="text-sm font-medium text-indigo-900 min-h-[1.25rem]">
+                           {currentOutputFragment || <span className="text-indigo-300 italic">{t.thinking}</span>}
+                         </p>
+                       </div>
+                     </>
+                   )}
+                 </div>
               </div>
             )}
           </div>
