@@ -253,11 +253,11 @@ async function startServer() {
   {
     "transcription": "string (If audio was provided, transcribe what the patient said in their original language. If text was provided, mirror it back.)",
     "languageDetected": "string (name of the language detected, in that language)",
-    "extractedSymptoms": ["string", "string"], (translated to target language)
-    "estimatedDuration": "string", (translated)
-    "triageStatus": "RED" | "AMBER" | "GREEN",
-    "suggestedAction": "string (clear, actionable next step)", (translated)
-    "administrativeAlertFlags": ["string", "string"], (translated)
+    "extractedSymptoms": ["string (translated to target language)", "string"],
+    "estimatedDuration": "string (translated)",
+    "triageStatus": "RED | AMBER | GREEN",
+    "suggestedAction": "string (clear, actionable next step, translated)",
+    "administrativeAlertFlags": ["string (translated)", "string"],
     "uiTranslations": {
       "statusBannerPriority": "string",
       "statusBannerMessage": "string",
