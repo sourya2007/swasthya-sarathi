@@ -5,38 +5,150 @@ import path from "path";
 import fs from "fs";
 
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
+const OPENROUTER_FALLBACK_MODELS = [
+  "qwen/qwen3-coder:free",
+  "google/gemma-4-26b-a4b-it:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "nousresearch/hermes-3-llama-3.1-405b:free",
+];
 
-async function callOpenRouter(systemPrompt: string, userMessage: string, model?: string): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
+function ruleBasedTriage(description: string): object {
+  const text = description.toLowerCase();
+  const red = ["unconscious", "not breathing", "severe bleeding", "heart attack", "stroke", "poisoning", "suicidal", "head injury", "seizure", "choking", "drowning", "electric shock", "burn severe", "anaphylaxis", "allergic reaction severe", "chest pain", "difficulty breathing", "cannot breathe"];
+  const amber = ["fever high", "fracture", "broken bone", "deep cut", "burn", "vomiting", "dehydrat", "infection", "pregnancy", "labor", "contraction", "abdominal pain severe", "back injury", "eye injury", "moderate bleeding", "persistent pain", "difficulty swallowing", "high bp", "dizziness", "fainting", "confusion"];
 
-  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-      "HTTP-Referer": "https://swasthya-sarathi.onrender.com",
-      "X-Title": "Swasthya Sarathi",
+  const matchedRed = red.some(k => text.includes(k));
+  const matchedAmber = amber.some(k => text.includes(k));
+
+  const status = matchedRed ? "RED" : matchedAmber ? "AMBER" : "GREEN";
+  const action: Record<string, string> = {
+    RED: "Call emergency services (108/102) immediately. Do NOT move the patient unless necessary.",
+    AMBER: "Visit the nearest Primary Health Centre within 24 hours. Monitor symptoms closely.",
+    GREEN: "Schedule a routine check-up at your convenience. Home care and monitoring recommended.",
+  };
+
+  return {
+    transcription: description,
+    languageDetected: "English",
+    extractedSymptoms: [description],
+    estimatedDuration: matchedRed ? "Immediate" : matchedAmber ? "Within 24 hours" : "Routine",
+    triageStatus: status,
+    suggestedAction: action[status],
+    administrativeAlertFlags: status === "RED" ? ["Urgent ambulance dispatch needed"] : [],
+    uiTranslations: {
+      statusBannerPriority: status,
+      statusBannerMessage: action[status],
+      estResponseTimeLabel: "Estimated Response Time",
+      languageLabel: "Language",
+      estDurationLabel: "Estimated Duration",
+      extractedSymptomsLabel: "Identified Symptoms",
+      noSymptomsLabel: "No specific symptoms identified.",
+      suggestedActionPlanLabel: "Suggested Action Plan",
+      administrativeAlertsLabel: "Administrative Alerts",
+      patientIntakeLabel: "Patient Intake",
+      symptomsDescriptionLabel: "Symptoms Description",
+      quickTestScenariosLabel: "Quick Test Scenarios",
+      analyzeButtonLabel: "Analyze & Triage Patient",
     },
-    body: JSON.stringify({
-      model: model || process.env.OPENROUTER_MODEL || "qwen/qwen3-coder:free",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      temperature: 0.1,
-    }),
-  });
+  };
+}
 
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`OpenRouter error (${res.status}): ${err}`);
+function ruleBasedManagement(description: string): object {
+  const text = description.toLowerCase();
+  const lowStock = text.includes("low stock") || text.includes("out of stock") || text.includes("shortage");
+  const highFootfall = text.includes("crowd") || text.includes("full") || text.includes("overflow") || text.includes("waiting");
+
+  return {
+    transcription: description,
+    metrics: {
+      footfall: highFootfall ? "High" : "Normal",
+      bedsAvailable: text.includes("bed") ? "Limited" : "Adequate",
+      doctorAttendance: text.includes("doctor") ? "Present" : "On duty",
+      testsAvailable: lowStock ? "Limited" : "Available",
+    },
+    stockWarnings: lowStock ? [{ item: "Medical supplies", daysLeft: "3", warningLevel: "CRITICAL" }] : [],
+    demandForecasts: highFootfall ? [{ condition: "Current demand", expectedSurge: "High", reason: "High patient inflow reported" }] : [],
+    redistributionRecommendations: [],
+    flaggedCentres: [],
+    uiTranslations: {
+      metricsTitle: "Centre Metrics",
+      stockWarningsTitle: "Stock Warnings",
+      demandForecastsTitle: "Demand Forecasts",
+      redistributionTitle: "Resource Redistribution",
+      flaggedCentresTitle: "Flagged Centres",
+    },
+  };
+}
+
+async function callOpenRouter(
+  systemPrompt: string,
+  userMessage: string,
+  model?: string,
+  retries = 2,
+): Promise<string | null> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return null;
+
+  const modelsToTry = model
+    ? [model, ...OPENROUTER_FALLBACK_MODELS.filter(m => m !== model)]
+    : OPENROUTER_FALLBACK_MODELS;
+
+  for (const m of modelsToTry) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+            "HTTP-Referer": "https://swasthya-sarathi.onrender.com",
+            "X-Title": "Swasthya Sarathi",
+          },
+          body: JSON.stringify({
+            model: m,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userMessage },
+            ],
+            temperature: 0.1,
+          }),
+        });
+
+        if (res.status === 429) {
+          const body = await res.json();
+          const retryAfter = body?.metadata?.retry_after_seconds_raw
+            ? Math.ceil(Number(body.metadata.retry_after_seconds_raw)) + 1
+            : 3;
+          if (attempt < retries) {
+            console.log(`  OpenRouter 429 on ${m}, retrying in ${retryAfter}s (attempt ${attempt + 1}/${retries})`);
+            await new Promise(r => setTimeout(r, retryAfter * 1000));
+            continue;
+          }
+          console.warn(`  OpenRouter: ${m} exhausted, trying next model...`);
+          break;
+        }
+
+        if (!res.ok) {
+          console.warn(`  OpenRouter ${res.status} on ${m}: ${await res.text()}`);
+          break;
+        }
+
+        const data = await res.json();
+        const text = data.choices?.[0]?.message?.content;
+        if (text) return text;
+        break;
+      } catch (err: any) {
+        if (attempt < retries) {
+          console.log(`  OpenRouter error on ${m}, retrying: ${err.message}`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        console.warn(`  OpenRouter: ${m} failed: ${err.message}`);
+        break;
+      }
+    }
   }
-
-  const data = await res.json();
-  const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error("Empty response from OpenRouter");
-  return text;
+  return null;
 }
 
 // Load .env file manually (no dotenv dependency needed)
@@ -348,29 +460,34 @@ async function startServer() {
   AMBER: Urgent, needs care soon but not immediately life-threatening.
   GREEN: Non-urgent, routine care or self-management.`;
 
-  async function runAITriage(systemPrompt: string, userPrompt: string): Promise<string> {
-    if (process.env.OPENROUTER_API_KEY) {
+  async function runAITriage(systemPrompt: string, userPrompt: string, rawDescription: string): Promise<object> {
+    // 1. Try OpenRouter
+    const orResult = await callOpenRouter(systemPrompt, userPrompt);
+    if (orResult) {
+      try { return JSON.parse(orResult); } catch (_) {}
+      console.warn("OpenRouter returned invalid JSON, falling through");
+    }
+    // 2. Try Gemini
+    if (ai) {
       try {
-        return await callOpenRouter(systemPrompt, userPrompt);
-      } catch (orErr: any) {
-        console.error("OpenRouter triage failed, trying Gemini:", orErr.message);
+        const response = await ai.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: [userPrompt],
+          config: {
+            systemInstruction: systemPrompt,
+            responseMimeType: "application/json",
+            temperature: 0.1,
+          },
+        });
+        const text = response.text;
+        if (text) return JSON.parse(text);
+      } catch (gErr: any) {
+        console.warn("Gemini triage failed:", gErr.message);
       }
     }
-    if (ai) {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: [userPrompt],
-        config: {
-          systemInstruction: systemPrompt,
-          responseMimeType: "application/json",
-          temperature: 0.1,
-        },
-      });
-      const text = response.text;
-      if (!text) throw new Error("Empty response from Gemini");
-      return text;
-    }
-    throw new Error("No AI provider available (set OPENROUTER_API_KEY or GEMINI_API_KEY)");
+    // 3. Rule-based fallback
+    console.warn("All AI providers unavailable, using rule-based triage fallback");
+    return ruleBasedTriage(rawDescription);
   }
 
   server.post("/api/triage", async (req, res) => {
@@ -379,12 +496,12 @@ async function startServer() {
       if (!description || typeof description !== "string") {
         return res.status(400).json({ error: "Patient description is required." });
       }
-      let userPrompt = preferredLanguage
+      const userPrompt = preferredLanguage
         ? `Preferred Language for Output Translations: ${preferredLanguage}\n\n${description}`
         : description;
 
-      const text = await runAITriage(TRIAGE_PROMPT, userPrompt);
-      return res.json(JSON.parse(text));
+      const result = await runAITriage(TRIAGE_PROMPT, userPrompt, description);
+      return res.json(result);
     } catch (error: any) {
       console.error("Triage API Error:", error?.message || error);
       return res.status(500).json({
@@ -433,29 +550,34 @@ async function startServer() {
     }
   }`;
 
-  async function runAIManagement(systemPrompt: string, userPrompt: string): Promise<string> {
-    if (process.env.OPENROUTER_API_KEY) {
+  async function runAIManagement(systemPrompt: string, userPrompt: string, rawDescription: string): Promise<object> {
+    // 1. Try OpenRouter
+    const orResult = await callOpenRouter(systemPrompt, userPrompt);
+    if (orResult) {
+      try { return JSON.parse(orResult); } catch (_) {}
+      console.warn("OpenRouter returned invalid JSON, falling through");
+    }
+    // 2. Try Gemini
+    if (ai) {
       try {
-        return await callOpenRouter(systemPrompt, userPrompt);
-      } catch (orErr: any) {
-        console.error("OpenRouter management failed, trying Gemini:", orErr.message);
+        const response = await ai.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: [userPrompt],
+          config: {
+            systemInstruction: systemPrompt,
+            responseMimeType: "application/json",
+            temperature: 0.1,
+          },
+        });
+        const text = response.text;
+        if (text) return JSON.parse(text);
+      } catch (gErr: any) {
+        console.warn("Gemini management failed:", gErr.message);
       }
     }
-    if (ai) {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: [userPrompt],
-        config: {
-          systemInstruction: systemPrompt,
-          responseMimeType: "application/json",
-          temperature: 0.1,
-        },
-      });
-      const text = response.text;
-      if (!text) throw new Error("Empty response from Gemini");
-      return text;
-    }
-    throw new Error("No AI provider available (set OPENROUTER_API_KEY or GEMINI_API_KEY)");
+    // 3. Rule-based fallback
+    console.warn("All AI providers unavailable, using rule-based management fallback");
+    return ruleBasedManagement(rawDescription);
   }
 
   server.post("/api/management", async (req, res) => {
@@ -464,12 +586,12 @@ async function startServer() {
       if (!description || typeof description !== "string") {
         return res.status(400).json({ error: "Centre status description is required." });
       }
-      let userPrompt = preferredLanguage
+      const userPrompt = preferredLanguage
         ? `Preferred Language for Output Translations: ${preferredLanguage}\n\n${description}`
         : description;
 
-      const text = await runAIManagement(MANAGEMENT_PROMPT, userPrompt);
-      return res.json(JSON.parse(text));
+      const result = await runAIManagement(MANAGEMENT_PROMPT, userPrompt, description);
+      return res.json(result);
     } catch (error: any) {
       console.error("Management API Error:", error?.message || error);
       return res.status(500).json({
